@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Blue Lock Rivals 3D - Mobile Edition</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- PeerJS for P2P multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #05050a;
+            color: #ffffff;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        .font-anime {
+            font-family: 'Teko', sans-serif;
+            letter-spacing: 0.05em;
+        }
+        .neon-glow-blue {
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.8), 0 0 20px rgba(0, 242, 254, 0.5);
+        }
+        .cyber-border {
+            border: 2px solid rgba(0, 242, 254, 0.4);
+            box-shadow: inset 0 0 15px rgba(0, 242, 254, 0.2), 0 0 15px rgba(0, 242, 254, 0.2);
+        }
+        #joystick-base {
+            width: 130px;
+            height: 130px;
+            background: rgba(0, 242, 254, 0.1);
+            border: 2px solid rgba(0, 242, 254, 0.4);
+            border-radius: 50%;
+            position: relative;
+            touch-action: none;
+        }
+        #joystick-stick {
+            width: 55px;
+            height: 55px;
+            background: rgba(0, 242, 254, 0.85);
+            border-radius: 50%;
+            position: absolute;
+            top: 37px;
+            left: 37px;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.9);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen relative">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- Menu Overlay -->
+    <div id="menu-overlay" class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto">
+        <div class="text-center max-w-md w-full">
+            <h1 class="text-5xl md:text-7xl font-anime font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600 neon-glow-blue mb-1">
+                BLUE LOCK RIVALS
+            </h1>
+            <p class="text-cyan-300 tracking-widest uppercase mb-6 text-xs md:text-sm font-semibold">Mobile Touch Edition - Fully Fixed</p>
+
+            <!-- Mode Selection -->
+            <div id="mode-select-box" class="bg-slate-900/95 cyber-border p-4 rounded-2xl mb-4 shadow-2xl">
+                <h2 class="text-xl font-anime text-cyan-400 mb-3">SELECT MATCH TYPE</h2>
+                <div class="space-y-3">
+                    <button id="btn-mode-ai" class="w-full py-3 px-4 bg-cyan-600 hover:bg-cyan-500 font-anime text-lg rounded-xl transition-all shadow-lg shadow-cyan-500/30">
+                        SOLO VS AI (Practice)
+                    </button>
+                    <button id="btn-mode-p2p" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 font-anime text-lg rounded-xl transition-all shadow-lg shadow-indigo-500/30">
+                        ONLINE MULTIPLAYER (P2P)
+                    </button>
+                </div>
+            </div>
+
+            <!-- P2P Lobby Box -->
+            <div id="p2p-lobby-box" class="hidden bg-slate-900/95 cyber-border p-4 rounded-2xl mb-4 shadow-2xl text-left">
+                <h2 class="text-xl font-anime text-cyan-400 mb-2">ONLINE LOBBY</h2>
+                <div class="mb-3">
+                    <p class="text-xs text-slate-400 mb-1">Your Peer ID:</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="my-peer-id" readonly class="bg-slate-800 border border-slate-700 px-2 py-1.5 rounded-lg w-full text-cyan-300 text-xs font-mono" value="Generating...">
+                        <button id="btn-copy-id" class="px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-semibold">Copy</button>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <p class="text-xs text-slate-400 mb-1">Opponent ID:</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="target-peer-id" placeholder="Paste ID here..." class="bg-slate-800 border border-slate-700 px-2 py-1.5 rounded-lg w-full text-white text-xs font-mono">
+                        <button id="btn-connect-peer" class="px-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-anime text-base rounded-lg">Join</button>
+                    </div>
+                </div>
+                <div id="p2p-status" class="text-xs text-amber-400 font-mono mb-2">Status: Waiting for connection...</div>
+                <button id="btn-back-menu" class="text-xs text-slate-400 underline hover:text-white">← Back</button>
+            </div>
+
+            <!-- Character Selection Box -->
+            <div id="char-select-box" class="bg-slate-900/95 cyber-border p-4 rounded-2xl shadow-2xl">
+                <h2 class="text-xl font-anime text-cyan-400 mb-3">CHOOSE YOUR EGOIST</h2>
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <!-- Isagi Card -->
+                    <div id="card-isagi" class="char-card cursor-pointer border-2 border-cyan-500 bg-cyan-950/50 p-3 rounded-xl transition-all relative">
+                        <h3 class="text-xl font-anime text-cyan-300">ISAGI</h3>
+                        <p class="text-[10px] text-slate-300">Direct Shot & Meta Dash</p>
+                    </div>
+                    <!-- Nagi Card -->
+                    <div id="card-nagi" class="char-card cursor-pointer border-2 border-slate-700 bg-slate-950/30 p-3 rounded-xl transition-all relative">
+                        <h3 class="text-xl font-anime text-indigo-300">NAGI</h3>
+                        <p class="text-[10px] text-slate-300">Dead-Stop Trap & Acrobat Dash</p>
+                    </div>
+                </div>
+                <button id="btn-start" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-anime text-xl font-bold rounded-xl shadow-lg shadow-cyan-500/30">
+                    START MATCH
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HUD & Mobile Touch Controls Overlay -->
+    <div id="hud-overlay" class="absolute inset-0 z-20 pointer-events-none hidden flex flex-col justify-between p-3">
+        <!-- Top Header & Scoreboard -->
+        <div class="flex justify-between items-center w-full max-w-lg mx-auto bg-slate-950/80 backdrop-blur border border-cyan-500/30 px-4 py-2 rounded-2xl shadow-xl pointer-events-auto">
+            <div>
+                <span id="hud-p1-name" class="text-cyan-400 font-anime text-lg">ISAGI</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="score-p1" class="text-3xl font-anime font-bold text-cyan-400">0</span>
+                <span class="text-xl font-anime text-slate-500">VS</span>
+                <span id="score-p2" class="text-3xl font-anime font-bold text-indigo-400">0</span>
+            </div>
+            <div>
+                <span id="hud-p2-name" class="text-indigo-400 font-anime text-lg">AI / P2</span>
+            </div>
+        </div>
+
+        <!-- Center Notification Banner -->
+        <div id="announcement-banner" class="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none transition-all opacity-0 scale-50">
+            <h2 id="announcement-title" class="text-6xl font-anime font-bold text-cyan-400 neon-glow-blue">GOAL!</h2>
+            <p id="announcement-sub" class="text-sm text-white font-semibold">Awaken your ego!</p>
+        </div>
+
+        <!-- Touch Controls & Action Buttons (Bottom) -->
+        <div class="flex justify-between items-end w-full max-w-4xl mx-auto pb-4 pointer-events-auto">
+            <!-- Virtual Joystick Left -->
+            <div id="joystick-container" class="flex items-center justify-center p-2">
+                <div id="joystick-base">
+                    <div id="joystick-stick"></div>
+                </div>
+            </div>
+
+            <!-- Action Buttons Right (Dash & Skill/Shot) -->
+            <div class="flex flex-col gap-3 items-end">
+                <button id="btn-touch-dash" class="w-20 h-20 bg-cyan-600/80 active:bg-cyan-400 border-2 border-cyan-300 rounded-full flex flex-col items-center justify-center shadow-lg backdrop-blur">
+                    <span class="font-anime text-lg font-bold text-white">DASH</span>
+                    <span id="cd-dash" class="text-[9px] text-cyan-200">READY</span>
+                </button>
+                <button id="btn-touch-skill" class="w-24 h-24 bg-indigo-600/80 active:bg-indigo-400 border-2 border-indigo-300 rounded-full flex flex-col items-center justify-center shadow-lg backdrop-blur">
+                    <span id="lbl-skill" class="font-anime text-lg font-bold text-white">POWER</span>
+                    <span id="cd-skill" class="text-[9px] text-indigo-200">READY</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer;
+        let p1CharType = 'isagi', p2CharType = 'nagi';
+        let gameMode = 'ai'; // 'ai' or 'p2p'
+        let isHost = false;
+        let peer = null, conn = null;
+        let gameState = 'MENU';
+
+        let ball;
+        let p1Mesh, p2Mesh;
+        let p1Score = 0, p2Score = 0;
+
+        const FIELD_WIDTH = 26;
+        const FIELD_LENGTH = 46;
+        const GOAL_WIDTH = 9;
+
+        // Player & Ball Physics Data
+        let p1Data = { x: 0, z: 14, vx: 0, vz: 0, speed: 0.24, radius: 1.1, dashCd: 0, skillCd: 0, facing: new THREE.Vector3(0,0,-1) };
+        let p2Data = { x: 0, z: -14, vx: 0, vz: 0, speed: 0.22, radius: 1.1, dashCd: 0, skillCd: 0, facing: new THREE.Vector3(0,0,1) };
+        let ballData = { x: 0, y: 0.5, z: 0, vx: 0, vy: 0, vz: 0, radius: 0.55, friction: 0.985 };
+
+        // Touch Joystick state
+        let joystickActive = false;
+        let joystickTouchId = null;
+        let joystickVector = new THREE.Vector2(0, 0);
+        let joystickOrigin = new THREE.Vector2(0, 0);
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initMenuUI();
+            initThreeScene();
+            setupTouchControls();
+            animate();
+        });
+
+        function initMenuUI() {
+            const btnModeAI = document.getElementById('btn-mode-ai');
+            const btnModeP2P = document.getElementById('btn-mode-p2p');
+            const p2pLobbyBox = document.getElementById('p2p-lobby-box');
+            const modeSelectBox = document.getElementById('mode-select-box');
+            const btnBackMenu = document.getElementById('btn-back-menu');
+            const btnCopyId = document.getElementById('btn-copy-id');
+            const btnConnectPeer = document.getElementById('btn-connect-peer');
+            const charSelectBox = document.getElementById('char-select-box');
+            const btnStart = document.getElementById('btn-start');
+
+            const cardIsagi = document.getElementById('card-isagi');
+            const cardNagi = document.getElementById('card-nagi');
+
+            btnModeAI.addEventListener('click', () => {
+                gameMode = 'ai';
+                modeSelectBox.classList.add('hidden');
+                charSelectBox.classList.remove('hidden');
+            });
+
+            btnModeP2P.addEventListener('click', () => {
+                gameMode = 'p2p';
+                isHost = true;
+                modeSelectBox.classList.add('hidden');
+                p2pLobbyBox.classList.remove('hidden');
+                initPeerJS();
+            });
+
+            btnBackMenu.addEventListener('click', () => {
+                p2pLobbyBox.classList.add('hidden');
+                modeSelectBox.classList.remove('hidden');
+                if (peer) peer.destroy();
+            });
+
+            btnCopyId.addEventListener('click', () => {
+                const copyText = document.getElementById('my-peer-id');
+                copyText.select();
+                document.execCommand('copy');
+                btnCopyId.innerText = "Copied!";
+                setTimeout(() => btnCopyId.innerText = "Copy", 2000);
+            });
+
+            btnConnectPeer.addEventListener('click', () => {
+                const targetId = document.getElementById('target-peer-id').value.trim();
+                if (!targetId) return;
+                isHost = false;
+                connectToPeer(targetId);
+            });
+
+            cardIsagi.addEventListener('click', () => {
+                p1CharType = 'isagi';
+                cardIsagi.className = "char-card cursor-pointer border-2 border-cyan-500 bg-cyan-950/50 p-3 rounded-xl transition-all relative";
+                cardNagi.className = "char-card cursor-pointer border-2 border-slate-700 bg-slate-950/30 p-3 rounded-xl transition-all relative";
+            });
+
+            cardNagi.addEventListener('click', () => {
+                p1CharType = 'nagi';
+                cardNagi.className = "char-card cursor-pointer border-2 border-indigo-500 bg-indigo-950/50 p-3 rounded-xl transition-all relative";
+                cardIsagi.className = "char-card cursor-pointer border-2 border-slate-700 bg-slate-950/30 p-3 rounded-xl transition-all relative";
+            });
+
+            btnStart.addEventListener('click', () => {
+                document.getElementById('menu-overlay').classList.add('opacity-0');
+                setTimeout(() => {
+                    document.getElementById('menu-overlay').style.display = 'none';
+                    document.getElementById('hud-overlay').classList.remove('hidden');
+                    updateSkillLabel();
+                    startMatch();
+                }, 500);
+            });
+        }
+
+        function initPeerJS() {
+            peer = new Peer();
+            peer.on('open', (id) => {
+                document.getElementById('my-peer-id').value = id;
+                document.getElementById('p2p-status').innerText = "Status: Ready. Share your ID.";
+            });
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupPeerConnection();
+                document.getElementById('p2p-status').innerText = "Status: Connected!";
+                setTimeout(() => {
+                    document.getElementById('p2p-lobby-box').classList.add('hidden');
+                    document.getElementById('char-select-box').classList.remove('hidden');
+                }, 1000);
+            });
+        }
+
+        function connectToPeer(id) {
+            document.getElementById('p2p-status').innerText = "Status: Connecting...";
+            conn = peer.connect(id);
+            setupPeerConnection();
+            conn.on('open', () => {
+                document.getElementById('p2p-status').innerText = "Status: Connected!";
+                isHost = false;
+                setTimeout(() => {
+                    document.getElementById('p2p-lobby-box').classList.add('hidden');
+                    document.getElementById('char-select-box').classList.remove('hidden');
+                }, 1000);
+            });
+        }
+
+        function setupPeerConnection() {
+            conn.on('data', (data) => {
+                if (data.type === 'sync' && !isHost) {
+                    p2Data.x = data.p1.x; p2Data.z = data.p1.z;
+                    p1Data.x = data.p2.x; p1Data.z = data.p2.z;
+                    ballData.x = data.ball.x; ballData.z = data.ball.z;
+                    ballData.vx = data.ball.vx; ballData.vz = data.ball.vz;
+                    p1Score = data.scores.p2; p2Score = data.scores.p1;
+                    updateScoreHUD();
+                } else if (data.type === 'action') {
+                    if (data.action === 'dash') triggerDash(2, false);
+                    if (data.action === 'skill') triggerSkill(2, false);
+                } else if (data.type === 'start') {
+                    p1CharType = data.p2Char;
+                    p2CharType = data.p1Char;
+                    updateSkillLabel();
+                }
+            });
+        }
+
+        function updateSkillLabel() {
+            const lbl = document.getElementById('lbl-skill');
+            if (p1CharType === 'isagi') {
+                lbl.innerText = "DIRECT SHOT";
+            } else {
+                lbl.innerText = "TRAP";
+            }
+        }
+
+        function initThreeScene() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050714);
+            scene.fog = new THREE.FogExp2(0x050714, 0.012);
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 28, 30);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0x00f2fe, 1.3);
+            dirLight.position.set(20, 40, 20);
+            scene.add(dirLight);
+
+            buildStadium();
+            buildCharacters();
+            buildBall();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function buildStadium() {
+            const pitchGeo = new THREE.PlaneGeometry(FIELD_WIDTH, FIELD_LENGTH);
+            const pitchMat = new THREE.MeshStandardMaterial({ color: 0x0a0f24, roughness: 0.8 });
+            const pitch = new THREE.Mesh(pitchGeo, pitchMat);
+            pitch.rotation.x = -Math.PI / 2;
+            scene.add(pitch);
+
+            const gridHelper = new THREE.GridHelper(FIELD_LENGTH, 23, 0x00f2fe, 0x1e293b);
+            gridHelper.position.y = 0.02;
+            scene.add(gridHelper);
+
+            createGoal(0, -FIELD_LENGTH / 2);
+            createGoal(0, FIELD_LENGTH / 2);
+        }
+
+        function createGoal(x, z) {
+            const goalGroup = new THREE.Group();
+            const postMat = new THREE.MeshStandardMaterial({ color: 0x00f2fe, emissive: 0x0088ff, emissiveIntensity: 0.6 });
+            const postGeo = new THREE.CylinderGeometry(0.25, 0.25, 4.5);
+            const leftPost = new THREE.Mesh(postGeo, postMat);
+            leftPost.position.set(-GOAL_WIDTH/2, 2.25, 0);
+            const rightPost = new THREE.Mesh(postGeo, postMat);
+            rightPost.position.set(GOAL_WIDTH/2, 2.25, 0);
+            const crossGeo = new THREE.CylinderGeometry(0.25, 0.25, GOAL_WIDTH);
+            const crossbar = new THREE.Mesh(crossGeo, postMat);
+            crossbar.rotation.z = Math.PI / 2;
+            crossbar.position.set(0, 4.5, 0);
+            goalGroup.add(leftPost, rightPost, crossbar);
+            goalGroup.position.set(x, 0, z);
+            scene.add(goalGroup);
+        }
+
+        function buildCharacters() {
+            const bodyGeo = new THREE.ConeGeometry(0.85, 2.4, 8);
+            const p1Mat = new THREE.MeshStandardMaterial({ color: 0x00f2fe, emissive: 0x005577 });
+            p1Mesh = new THREE.Mesh(bodyGeo, p1Mat);
+            p1Mesh.position.y = 1.2;
+            scene.add(p1Mesh);
+
+            const p2Mat = new THREE.MeshStandardMaterial({ color: 0x6366f1, emissive: 0x312e81 });
+            p2Mesh = new THREE.Mesh(bodyGeo, p2Mat);
+            p2Mesh.position.y = 1.2;
+            scene.add(p2Mesh);
+        }
+
+        function buildBall() {
+            const ballGeo = new THREE.SphereGeometry(ballData.radius, 32, 32);
+            const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, emissive: 0x222222 });
+            ball = new THREE.Mesh(ballGeo, ballMat);
+            ball.position.set(ballData.x, ballData.y, ballData.z);
+            scene.add(ball);
+        }
+
+        function setupTouchControls() {
+            const joystickBase = document.getElementById('joystick-base');
+            const joystickStick = document.getElementById('joystick-stick');
+            const btnTouchDash = document.getElementById('btn-touch-dash');
+            const btnTouchSkill = document.getElementById('btn-touch-skill');
+
+            joystickBase.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.targetTouches[0];
+                joystickTouchId = touch.identifier;
+                const rect = joystickBase.getBoundingClientRect();
+                joystickOrigin.set(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                joystickActive = true;
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!joystickActive) return;
+                for (let i = 0; i < e.targetTouches.length; i++) {
+                    const touch = e.targetTouches[i];
+                    if (touch.identifier === joystickTouchId) {
+                        const dx = touch.clientX - joystickOrigin.x;
+                        const dz = touch.clientY - joystickOrigin.y;
+                        const dist = Math.sqrt(dx*dx + dz*dz);
+                        const maxDist = 45;
+                        const angle = Math.atan2(dz, dx);
+
+                        const clampedDist = Math.min(dist, maxDist);
+                        const stickX = Math.cos(angle) * clampedDist;
+                        const stickY = Math.sin(angle) * clampedDist;
+
+                        joystickStick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+                        joystickVector.set(stickX / maxDist, stickY / maxDist);
+                    }
+                }
+            });
+
+            const endJoystick = (e) => {
+                joystickActive = false;
+                joystickVector.set(0, 0);
+                joystickStick.style.transform = `translate(0px, 0px)`;
+            };
+
+            window.addEventListener('touchend', endJoystick);
+            window.addEventListener('touchcancel', endJoystick);
+
+            btnTouchDash.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                triggerDash(1, true);
+            });
+
+            btnTouchSkill.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                triggerSkill(1, true);
+            });
+        }
+
+        function startMatch() {
+            gameState = 'PLAYING';
+            p1Score = 0; p2Score = 0;
+            updateScoreHUD();
+            resetPositions();
+            if (gameMode === 'p2p' && isHost && conn) {
+                conn.send({ type: 'start', p1Char: p1CharType, p2Char: p2CharType });
+            }
+        }
+
+        function triggerDash(playerNum, sendP2P = false) {
+            const p = playerNum === 1 ? p1Data : p2Data;
+            const now = Date.now();
+            if (p.dashCd > now) return;
+            p.dashCd = now + 1800;
+
+            // Dash impulse in facing direction
+            p.vx += p.facing.x * 1.1;
+            p.vz += p.facing.z * 1.1;
+
+            if (sendP2P && gameMode === 'p2p' && conn) {
+                conn.send({ type: 'action', action: 'dash' });
+            }
+        }
+
+        function triggerSkill(playerNum, sendP2P = false) {
+            const p = playerNum === 1 ? p1Data : p2Data;
+            const char = playerNum === 1 ? p1CharType : p2CharType;
+            const now = Date.now();
+            if (p.skillCd > now) return;
+            p.skillCd = now + 3500;
+
+            if (char === 'isagi') {
+                showNotification("DIRECT SHOT!");
+                // Direct shot towards opponent's goal
+                const targetZ = playerNum === 1 ? -FIELD_LENGTH/2 : FIELD_LENGTH/2;
+                const dirZ = targetZ > ballData.z ? 1 : -1;
+                ballData.vx = (Math.random() - 0.5) * 0.4;
+                ballData.vz = dirZ * 1.8;
+            } else {
+                showNotification("DEAD-STOP TRAP!");
+                // Instantly trap ball near player
+                ballData.vx = 0;
+                ballData.vz = 0;
+                ballData.x = p.x;
+                ballData.z = p.z + (playerNum === 1 ? -1.2 : 1.2);
+            }
+
+            if (sendP2P && gameMode === 'p2p' && conn) {
+                conn.send({ type: 'action', action: 'skill' });
+            }
+        }
+
+        function showNotification(text) {
+            const banner = document.getElementById('announcement-banner');
+            document.getElementById('announcement-title').innerText = text;
+            banner.classList.remove('opacity-0', 'scale-50');
+            banner.classList.add('opacity-100', 'scale-100');
+            setTimeout(() => {
+                banner.classList.remove('opacity-100', 'scale-100');
+                banner.classList.add('opacity-0', 'scale-50');
+            }, 1200);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (gameState === 'PLAYING') {
+                updatePhysics();
+                updateCamera();
+            }
+            renderer.render(scene, camera);
+        }
+
+        function updatePhysics() {
+            // P1 movement from joystick across the entire field
+            if (joystickVector.lengthSq() > 0) {
+                p1Data.vx = joystickVector.x * p1Data.speed;
+                p1Data.vz = joystickVector.y * p1Data.speed;
+                p1Data.facing.set(joystickVector.x, 0, joystickVector.y).normalize();
+            } else {
+                p1Data.vx *= 0.82;
+                p1Data.vz *= 0.82;
+            }
+
+            p1Data.x += p1Data.vx;
+            p1Data.z += p1Data.vz;
+
+            // Full field bounds (allowing players to cross the halfway line freely)
+            const margin = 1.0;
+            p1Data.x = Math.max(-FIELD_WIDTH/2 + margin, Math.min(FIELD_WIDTH/2 - margin, p1Data.x));
+            p1Data.z = Math.max(-FIELD_LENGTH/2 + margin, Math.min(FIELD_LENGTH/2 - margin, p1Data.z));
+
+            // Improved AI Opponent Movement
+            if (gameMode === 'ai' || (gameMode === 'p2p' && isHost)) {
+                let targetX = ballData.x;
+                let targetZ = ballData.z - 2;
+                p2Data.vx += (targetX - p2Data.x) * 0.06;
+                p2Data.vz += (targetZ - p2Data.z) * 0.06;
+                p2Data.vx *= 0.82; 
+                p2Data.vz *= 0.82;
+                
+                p2Data.x += p2Data.vx;
+                p2Data.z += p2Data.vz;
+                p2Data.x = Math.max(-FIELD_WIDTH/2 + margin, Math.min(FIELD_WIDTH/2 - margin, p2Data.x));
+                p2Data.z = Math.max(-FIELD_LENGTH/2 + margin, Math.min(FIELD_LENGTH/2 - margin, p2Data.z));
+
+                // AI shoot if close to ball and facing player goal
+                const distToBall = Math.sqrt((ballData.x - p2Data.x)**2 + (ballData.z - p2Data.z)**2);
+                if (distToBall < 1.8 && ballData.z > 0) {
+                    ballData.vz = 1.2;
+                    ballData.vx = (Math.random() - 0.5) * 0.5;
+                }
+            }
+
+            // Ball Physics & Friction
+            ballData.x += ballData.vx;
+            ballData.z += ballData.vz;
+            ballData.vx *= ballData.friction;
+            ballData.vz *= ballData.friction;
+
+            // Ball Wall Collisions
+            if (ballData.x < -FIELD_WIDTH/2 + ballData.radius) {
+                ballData.x = -FIELD_WIDTH/2 + ballData.radius;
+                ballData.vx *= -0.8;
+            }
+            if (ballData.x > FIELD_WIDTH/2 - ballData.radius) {
+                ballData.x = FIELD_WIDTH/2 - ballData.radius;
+                ballData.vx *= -0.8;
+            }
+
+            // Goals & Scoring Check
+            if (ballData.z < -FIELD_LENGTH/2) {
+                if (ballData.x > -GOAL_WIDTH/2 && ballData.x < GOAL_WIDTH/2) {
+                    scoreGoal(1);
+                } else {
+                    ballData.z = -FIELD_LENGTH/2 + ballData.radius;
+                    ballData.vz *= -0.8;
+                }
+            }
+            if (ballData.z > FIELD_LENGTH/2) {
+                if (ballData.x > -GOAL_WIDTH/2 && ballData.x < GOAL_WIDTH/2) {
+                    scoreGoal(2);
+                } else {
+                    ballData.z = FIELD_LENGTH/2 - ballData.radius;
+                    ballData.vz *= -0.8;
+                }
+            }
+
+            checkCollision(p1Data);
+            checkCollision(p2Data);
+
+            p1Mesh.position.set(p1Data.x, 0, p1Data.z);
+            p2Mesh.position.set(p2Data.x, 0, p2Data.z);
+            ball.position.set(ballData.x, ballData.y, ballData.z);
+
+            if (gameMode === 'p2p' && isHost && conn && conn.open) {
+                conn.send({
+                    type: 'sync',
+                    p1: { x: p1Data.x, z: p1Data.z },
+                    p2: { x: p2Data.x, z: p2Data.z },
+                    ball: { x: ballData.x, z: ballData.z, vx: ballData.vx, vz: ballData.vz },
+                    scores: { p1: p1Score, p2: p2Score }
+                });
+            }
+        }
+
+        function checkCollision(p) {
+            const dx = ballData.x - p.x;
+            const dz = ballData.z - p.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist < p.radius + ballData.radius) {
+                const angle = Math.atan2(dz, dx);
+                const hitPower = 0.5;
+                ballData.vx = Math.cos(angle) * hitPower + p.vx * 1.3;
+                ballData.vz = Math.sin(angle) * hitPower + p.vz * 1.3;
+            }
+        }
+
+        function scoreGoal(player) {
+            if (player === 1) p1Score++; else p2Score++;
+            updateScoreHUD();
+            showNotification(`PLAYER ${player} GOAL!`);
+            resetPositions();
+        }
+
+        function resetPositions() {
+            p1Data.x = 0; p1Data.z = 14; p1Data.vx = 0; p1Data.vz = 0;
+            p2Data.x = 0; p2Data.z = -14; p2Data.vx = 0; p2Data.vz = 0;
+            ballData.x = 0; ballData.z = 0; ballData.vx = 0; ballData.vz = 0;
+        }
+
+        function updateScoreHUD() {
+            document.getElementById('score-p1').innerText = p1Score;
+            document.getElementById('score-p2').innerText = p2Score;
+        }
+
+        function updateCamera() {
+            camera.position.x = ballData.x * 0.25;
+            camera.position.z = 28 + (ballData.z * 0.08);
+            camera.lookAt(ballData.x * 0.15, 0, ballData.z * 0.15);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
